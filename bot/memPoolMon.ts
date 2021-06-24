@@ -16,9 +16,8 @@ import {
   susdCollateralAddr,
   sethCollateralAddr,
 } from './flashbotBase';
-import { ethers } from 'ethers';
 
-const snxDAO = '0x7a250d5630b4cf539739df2c5dacb4c659f2488d';
+const snxDAO = '0xEb3107117FEAd7de89Cd14D463D340A2E6917769';
 
 const options = {
   dappId: '85c6c02a-2df3-4758-980a-7143da2ae777',
@@ -109,61 +108,57 @@ async function main() {
 
   const { emitter } = blocknative.account(snxDAO);
 
-  let counter = 1;
   emitter.on('txPool', (tx) => {
     tx = tx as EthereumTransactionData;
     console.log('Tx hash:', tx.hash);
     const signedSnxTx = constructSignedTx(tx);
 
-    // trySubmitBundlesWithSnxTx(
-    //   flashbotsProvider,
-    //   susdSignedTxs,
-    //   susdRevertingTxHashes,
-    //   signedSnxTx,
-    //   blockNumber
-    // );
+    trySubmitBundlesWithSnxTx(
+      flashbotsProvider,
+      susdSignedTxs,
+      susdRevertingTxHashes,
+      signedSnxTx,
+      blockNumber
+    );
 
-    counter += 1;
-    if (counter === 2) {
+    trySubmitBundlesWithSnxTx(
+      flashbotsProvider,
+      sethSignedTxs,
+      sethRevertingTxHashes,
+      signedSnxTx,
+      blockNumber
+    );
+  });
+
+  emitter.on('txPoolSimulation', (tx) => {
+    tx = tx as EthereumTransactionData;
+    console.log('Tx hash:', tx.hash);
+    const signedSnxTx = constructSignedTx(tx);
+    for (const interCall of (tx as any).internalTransactions) {
+      let bundle: Array<string>, revertingHashes: Array<string>;
+
+      switch (interCall.to.toLowerCase()) {
+        case susdCollateralAddr.toLowerCase():
+          bundle = susdSignedTxs;
+          revertingHashes = susdRevertingTxHashes;
+          break;
+        case sethCollateralAddr.toLowerCase():
+          bundle = sethSignedTxs;
+          revertingHashes = sethRevertingTxHashes;
+          break;
+        default:
+          continue;
+      }
+
       trySubmitBundlesWithSnxTx(
         flashbotsProvider,
-        sethSignedTxs,
-        sethRevertingTxHashes,
+        bundle,
+        revertingHashes,
         signedSnxTx,
         blockNumber
       );
     }
   });
-
-  // emitter.on('txPoolSimulation', (tx) => {
-  //   tx = tx as EthereumTransactionData;
-  //   console.log('Tx hash:', tx.hash);
-  //   const signedSnxTx = constructSignedTx(tx);
-  //   for (const interCall of (tx as any).internalTransactions) {
-  //     let bundle: Array<string>, revertingHashes: Array<string>;
-
-  //     switch (interCall.to.toLowerCase()) {
-  //       case susdCollateralAddr.toLowerCase():
-  //         bundle = susdSignedTxs;
-  //         revertingHashes = susdRevertingTxHashes;
-  //         break;
-  //       case sethCollateralAddr.toLowerCase():
-  //         bundle = sethSignedTxs;
-  //         revertingHashes = sethRevertingTxHashes;
-  //         break;
-  //       default:
-  //         continue;
-  //     }
-
-  //     trySubmitBundlesWithSnxTx(
-  //       flashbotsProvider,
-  //       bundle,
-  //       revertingHashes,
-  //       signedSnxTx,
-  //       blockNumber
-  //     );
-  //   }
-  // });
 }
 
 main()
