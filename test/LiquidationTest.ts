@@ -73,12 +73,16 @@ describe('SnxLiquidation', () => {
     console.log('Block number: ', blockNumber);
 
     const balanceBefore = await signer.getBalance();
-    await snxLiquidator.liquidate(
-      '0x45899a8104CDa54deaBaDDA505f0bBA68223F631',
-      283,
+    const tx = await snxLiquidator.liquidate(
+      '0x69Eb40B6E9ea1953d4F5d28667Cc7A1B773be68c',
+      239,
       0,
-      '5000'
+      '9500',
+      { gasPrice: '0' }
     );
+    const gasUsed = (await tx.wait(1)).gasUsed;
+    console.log(`Gas used: ${gasUsed}`);
+
     const balanceAfter = await signer.getBalance();
     const minerBalanceAfter = await provider.getBalance(block.miner);
 
@@ -93,43 +97,57 @@ describe('SnxLiquidation', () => {
     expect(minerBalanceAfter).to.be.gt(
       minerBalanceBefore.add(ethers.utils.parseEther('2'))
     );
+    const minerProfit = minerBalanceAfter
+      .sub(minerBalanceBefore)
+      .sub(ethers.utils.parseEther('2'));
+    console.log('Miner profit: ', ethers.utils.formatEther(minerProfit));
+    const avgGasPrice = minerProfit.div(gasUsed);
     console.log(
-      'Miner profit: ',
-      ethers.utils.formatEther(minerBalanceAfter.sub(minerBalanceBefore))
+      'Avg gas price in gwei: ',
+      ethers.utils.formatUnits(avgGasPrice, 'gwei')
     );
   });
 
-  // it('Liquidate on susd with bribe', async () => {
-  //   const blockNumber = await provider.getBlockNumber();
-  //   const block = await provider.getBlock(blockNumber);
-  //   const minerBalanceBefore = await provider.getBalance(block.miner);
+  it('Liquidate on seth with bribe', async () => {
+    const blockNumber = await provider.getBlockNumber();
+    const block = await provider.getBlock(blockNumber);
+    const minerBalanceBefore = await provider.getBalance(block.miner);
 
-  //   console.log('Block number: ', blockNumber);
+    console.log('Block number: ', blockNumber);
 
-  //   const balanceBefore = await signer.getBalance();
-  //   await snxLiquidator.liquidate(
-  //     '0x820B24277A86fAc14ef5150c58B1815Cf9A3Cf46',
-  //     33,
-  //     1,
-  //     '2000'
-  //   );
-  //   const balanceAfter = await signer.getBalance();
-  //   const minerBalanceAfter = await provider.getBalance(block.miner);
+    const balanceBefore = await signer.getBalance();
+    const tx = await snxLiquidator.liquidate(
+      '0x6899f448072222c98E65ce3f29d9CcB92C739ad1',
+      98,
+      1,
+      '3000',
+      { gasPrice: '0' }
+    );
+    const gasUsed = (await tx.wait(1)).gasUsed;
+    console.log(`Gas used: ${gasUsed}`);
 
-  //   console.log('Block number: ', await provider.getBlockNumber());
+    const balanceAfter = await signer.getBalance();
+    const minerBalanceAfter = await provider.getBalance(block.miner);
 
-  //   expect(balanceAfter).to.be.gt(balanceBefore);
-  //   console.log(
-  //     'Profit: ',
-  //     ethers.utils.formatEther(balanceAfter.sub(balanceBefore))
-  //   );
+    console.log('Block number: ', await provider.getBlockNumber());
 
-  //   expect(minerBalanceAfter).to.be.gt(
-  //     minerBalanceBefore.add(ethers.utils.parseEther('2'))
-  //   );
-  //   console.log(
-  //     'Miner profit: ',
-  //     ethers.utils.formatEther(minerBalanceAfter.sub(minerBalanceBefore))
-  //   );
-  // });
+    expect(balanceAfter).to.be.gt(balanceBefore);
+    console.log(
+      'Profit: ',
+      ethers.utils.formatEther(balanceAfter.sub(balanceBefore))
+    );
+
+    expect(minerBalanceAfter).to.be.gt(
+      minerBalanceBefore.add(ethers.utils.parseEther('2'))
+    );
+    const minerProfit = minerBalanceAfter
+      .sub(minerBalanceBefore)
+      .sub(ethers.utils.parseEther('2'));
+    console.log('Miner profit: ', ethers.utils.formatEther(minerProfit));
+    const avgGasPrice = minerProfit.div(gasUsed);
+    console.log(
+      'Avg gas price in gwei: ',
+      ethers.utils.formatUnits(avgGasPrice, 'gwei')
+    );
+  });
 });

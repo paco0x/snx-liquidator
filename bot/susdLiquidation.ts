@@ -15,7 +15,6 @@ async function main() {
   );
 
   const [signedTxs, revertingTxHashes] = await getBundles(
-    '5000',
     susdLoaners,
     flashbotsProvider
   );

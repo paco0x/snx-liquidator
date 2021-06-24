@@ -36,7 +36,6 @@ export const sethCollateral = new ethers.Contract(
 );
 
 export async function getBundles(
-  minerBp: BigNumberish,
   loaners: Array<any>,
   flashbotsProvider: FlashbotsBundleProvider
 ): Promise<[Array<string>, Array<string>]> {
@@ -51,7 +50,7 @@ export async function getBundles(
         loaner.account,
         loaner.loanID,
         loaner.loanType,
-        minerBp,
+        loaner.minerBp,
         {
           gasPrice: 0,
           gasLimit: 500000,
