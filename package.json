@@ -6,7 +6,8 @@
   "license": "MIT",
   "scripts": {
     "seth-flashbot": "hardhat run ./bot/susdLiquidation.ts",
-    "susd-flashbot": "hardhat run ./bot/sethLiquidation.ts"
+    "susd-flashbot": "hardhat run ./bot/sethLiquidation.ts",
+    "mem-pool-bot": "hardhat run ./bot/memPoolBot.ts"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^4.1.0",
