@@ -20,26 +20,29 @@ async function main() {
     flashbotsProvider
   );
 
-  // const blockNumber = await provider.getBlockNumber();
-  // const simulation = await flashbotsProvider.simulate(
-  //   signedTxs,
-  //   blockNumber + 1
-  // );
-  // // Using TypeScript discrimination
-  // if ('error' in simulation) {
-  //   console.log(`Simulation Error: ${simulation.error.message}`);
-  //   process.exit(1);
-  // } else {
-  //   console.log(`Simulation Success: ${JSON.stringify(simulation, null, 2)}`);
-  // }
+  let opened = false;
 
   provider.on('block', async (blockNumber) => {
     console.log(`Block number: ${blockNumber}`);
 
-    const opened = await susdCollateral.loanLiquidationOpen();
-    console.log(`SUSD collateral opened: ${opened}`);
+    if (!opened) {
+      const snxOpened = await susdCollateral.loanLiquidationOpen();
+      console.log(`SETH collateral opened: ${snxOpened}`);
+    }
 
     if (opened) {
+      // const blockNumber = await provider.getBlockNumber();
+      // const simulation = await flashbotsProvider.simulate(
+      //   signedTxs,
+      //   blockNumber + 1
+      // );
+      // // Using TypeScript discrimination
+      // if ('error' in simulation) {
+      //   console.log(`Simulation Error: ${simulation.error.message}`);
+      // } else {
+      //   console.log(`Simulation Success:`);
+      // }
+
       const bundleSubmission = await flashbotsProvider.sendRawBundle(
         signedTxs,
         blockNumber + 1,
