@@ -27,6 +27,7 @@ async function main() {
     if (!opened) {
       const snxOpened = await sethCollateral.loanLiquidationOpen();
       console.log(`SETH liquidation opened: ${snxOpened}`);
+      opened = snxOpened;
     }
 
     if (opened) {

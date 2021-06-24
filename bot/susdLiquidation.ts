@@ -27,6 +27,7 @@ async function main() {
     if (!opened) {
       const snxOpened = await susdCollateral.loanLiquidationOpen();
       console.log(`SUSD liquidation opened: ${snxOpened}`);
+      opened = snxOpened;
     }
 
     if (opened) {

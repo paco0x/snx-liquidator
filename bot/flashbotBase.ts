@@ -23,14 +23,17 @@ const loanABI = [
   'function loanLiquidationOpen() external view returns(bool)',
   'function getLoan(address _account, uint256 _loanID) external view returns (address,uint256,uint256,uint256,uint256,uint256,uint256, uint256)',
 ];
+
+export const susdCollateralAddr = '0xfED77055B40d63DCf17ab250FFD6948FBFF57B82';
 export const susdCollateral = new ethers.Contract(
-  '0xfED77055B40d63DCf17ab250FFD6948FBFF57B82',
+  susdCollateralAddr,
   loanABI,
   provider
 );
 
+export const sethCollateralAddr = '0x7133afF303539b0A4F60Ab9bd9656598BF49E272';
 export const sethCollateral = new ethers.Contract(
-  '0x7133afF303539b0A4F60Ab9bd9656598BF49E272',
+  sethCollateralAddr,
   loanABI,
   provider
 );
