@@ -1,5 +1,5 @@
 import { ethers } from 'hardhat';
-import { BigNumberish, providers, Wallet } from 'ethers';
+import { providers, Wallet } from 'ethers';
 import { keccak256 } from 'ethers/lib/utils';
 import {
   FlashbotsBundleProvider,
