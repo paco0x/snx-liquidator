@@ -16,7 +16,8 @@
     },
     "include": [
         "./scripts",
-        "./test"
+        "./test",
+        "./bot"
     ],
     "files": [
         "./hardhat.config.ts"

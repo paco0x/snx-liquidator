@@ -10,6 +10,7 @@
     "@uniswap/v3-periphery": "^1.1.0"
   },
   "devDependencies": {
+    "@flashbots/ethers-provider-bundle": "^0.3.2",
     "@nomiclabs/hardhat-ethers": "^2.0.2",
     "@nomiclabs/hardhat-waffle": "^2.0.1",
     "@typechain/ethers-v5": "^7.0.1",

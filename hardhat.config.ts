@@ -15,7 +15,7 @@ const config: HardhatUserConfig = {
       },
     },
     mainnet: {
-      url: 'https://eth-mainnet.alchemyapi.io/v2/iAHwO4-koDDdXeemLhT-4i8jsx8phFnb',
+      url: 'https://mainnet.infura.io/v3/3a57292f72e4472b8ac896816a27d51f',
       accounts: [operator.private],
     },
     rinkeby: {
