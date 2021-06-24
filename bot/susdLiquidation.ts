@@ -27,7 +27,7 @@ async function main() {
 
     if (!opened) {
       const snxOpened = await susdCollateral.loanLiquidationOpen();
-      console.log(`SETH collateral opened: ${snxOpened}`);
+      console.log(`SUSD liquidation opened: ${snxOpened}`);
     }
 
     if (opened) {
