@@ -4,6 +4,10 @@
   "main": "index.js",
   "author": "Penghui Liao <liaoishere@gmail.com>",
   "license": "MIT",
+  "scripts": {
+    "seth-flashbot": "hardhat run ./bot/susdLiquidation.ts",
+    "susd-flashbot": "hardhat run ./bot/sethLiquidation.ts"
+  },
   "dependencies": {
     "@openzeppelin/contracts": "^4.1.0",
     "@uniswap/v3-core": "^1.0.0",
