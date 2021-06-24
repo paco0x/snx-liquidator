@@ -287,6 +287,7 @@ contract SnxLiquidator is IDydxCallee, ReentrancyGuard {
             require((ethBalance + loanAmount - wethSpent) > loanAmount, 'LE');
             console.log('ETH balance after liquidation: ', ethBalance / 1e18);
 
+            weth.deposit{value: ethBalance}();
         } else {
             weth.withdraw(loanAmount);
             // coin index in curve seth pool

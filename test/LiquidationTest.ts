@@ -1,5 +1,5 @@
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
-import { Contract } from 'ethers';
+import { Contract, Wallet } from 'ethers';
 import { ethers, network, waffle } from 'hardhat';
 import { expect } from 'chai';
 import chai from 'chai';
@@ -59,6 +59,13 @@ describe('SnxLiquidation', () => {
   });
 
   it('Liquidate on susd with bribe', async () => {
+    const randomSigner = Wallet.createRandom().connect(waffle.provider);
+    snxLiquidator.connect(randomSigner);
+    await network.provider.send('hardhat_setBalance', [
+      await randomSigner.getAddress(),
+      '0xa',
+    ]);
+
     const blockNumber = await provider.getBlockNumber();
     const block = await provider.getBlock(blockNumber);
     const minerBalanceBefore = await provider.getBalance(block.miner);
@@ -92,37 +99,37 @@ describe('SnxLiquidation', () => {
     );
   });
 
-  it('Liquidate on susd with bribe', async () => {
-    const blockNumber = await provider.getBlockNumber();
-    const block = await provider.getBlock(blockNumber);
-    const minerBalanceBefore = await provider.getBalance(block.miner);
+  // it('Liquidate on susd with bribe', async () => {
+  //   const blockNumber = await provider.getBlockNumber();
+  //   const block = await provider.getBlock(blockNumber);
+  //   const minerBalanceBefore = await provider.getBalance(block.miner);
 
-    console.log('Block number: ', blockNumber);
+  //   console.log('Block number: ', blockNumber);
 
-    const balanceBefore = await signer.getBalance();
-    await snxLiquidator.liquidate(
-      '0x820B24277A86fAc14ef5150c58B1815Cf9A3Cf46',
-      33,
-      1,
-      '2000'
-    );
-    const balanceAfter = await signer.getBalance();
-    const minerBalanceAfter = await provider.getBalance(block.miner);
+  //   const balanceBefore = await signer.getBalance();
+  //   await snxLiquidator.liquidate(
+  //     '0x820B24277A86fAc14ef5150c58B1815Cf9A3Cf46',
+  //     33,
+  //     1,
+  //     '2000'
+  //   );
+  //   const balanceAfter = await signer.getBalance();
+  //   const minerBalanceAfter = await provider.getBalance(block.miner);
 
-    console.log('Block number: ', await provider.getBlockNumber());
+  //   console.log('Block number: ', await provider.getBlockNumber());
 
-    expect(balanceAfter).to.be.gt(balanceBefore);
-    console.log(
-      'Profit: ',
-      ethers.utils.formatEther(balanceAfter.sub(balanceBefore))
-    );
+  //   expect(balanceAfter).to.be.gt(balanceBefore);
+  //   console.log(
+  //     'Profit: ',
+  //     ethers.utils.formatEther(balanceAfter.sub(balanceBefore))
+  //   );
 
-    expect(minerBalanceAfter).to.be.gt(
-      minerBalanceBefore.add(ethers.utils.parseEther('2'))
-    );
-    console.log(
-      'Miner profit: ',
-      ethers.utils.formatEther(minerBalanceAfter.sub(minerBalanceBefore))
-    );
-  });
+  //   expect(minerBalanceAfter).to.be.gt(
+  //     minerBalanceBefore.add(ethers.utils.parseEther('2'))
+  //   );
+  //   console.log(
+  //     'Miner profit: ',
+  //     ethers.utils.formatEther(minerBalanceAfter.sub(minerBalanceBefore))
+  //   );
+  // });
 });

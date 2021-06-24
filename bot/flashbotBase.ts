@@ -17,9 +17,12 @@ export const provider = new providers.WebSocketProvider(
 export const authSigner = Wallet.createRandom().connect(provider);
 
 // deployed contract address
-export const contractAddr = '0x9fA5fF96e123eF70BDc0A431A880e8EB38fdD5fc';
+export const contractAddr = '0x3e5d5926dcd62c2054af74e63bce067ad98857d4';
 
-const loanABI = ['function loanLiquidationOpen() external view returns(bool)'];
+const loanABI = [
+  'function loanLiquidationOpen() external view returns(bool)',
+  'function getLoan(address _account, uint256 _loanID) external view returns (address,uint256,uint256,uint256,uint256,uint256,uint256, uint256)',
+];
 export const susdCollateral = new ethers.Contract(
   '0xfED77055B40d63DCf17ab250FFD6948FBFF57B82',
   loanABI,
