@@ -53,7 +53,7 @@ export async function getBundles(
         loaner.minerBp,
         {
           gasPrice: 0,
-          gasLimit: 500000,
+          gasLimit: 1500000,
         }
       );
     bundles.push({ signer: authSigner, transaction: tx });
