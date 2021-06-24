@@ -8,13 +8,13 @@ const config: HardhatUserConfig = {
     hardhat: {
       // loggingEnabled: true,
       forking: {
-        url: 'wss://eth-mainnet.ws.alchemyapi.io/v2/iAHwO4-koDDdXeemLhT-4i8jsx8phFnb',
+        url: 'https://eth-mainnet.alchemyapi.io/v2/iAHwO4-koDDdXeemLhT-4i8jsx8phFnb',
         enabled: true,
       },
     },
   },
   mocha: {
-    timeout: 100000,
+    timeout: 300000,
   },
 };
 

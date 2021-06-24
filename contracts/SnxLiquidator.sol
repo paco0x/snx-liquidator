@@ -2,9 +2,8 @@
 pragma solidity ^0.8.0;
 
 import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
-import '@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3SwapCallback.sol';
-import '@uniswap/v3-core/contracts/interfaces/pool/IUniswapV3PoolActions.sol';
-import '@uniswap/v3-core/contracts/libraries/TickMath.sol';
+import '@uniswap/v3-periphery/contracts/interfaces/IQuoter.sol';
+import '@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol';
 
 import './DydxHelper.sol';
 
@@ -44,12 +43,16 @@ interface ICurveFi {
         int128 j,
         uint256 dx,
         uint256 min_dy
-    ) external returns (uint256);
+    ) external payable returns(uint256);
 }
 
-enum LoanType {
-    Susd,
-    Seth
+interface ICurveFiV2 {
+    function exchange(
+        int128 i,
+        int128 j,
+        uint256 dx,
+        uint256 min_dy
+    ) external;
 }
 
 interface IEtherCollatoral {
@@ -75,9 +78,14 @@ interface IEtherCollatoral {
         );
 }
 
-contract SnxLiquidator is IUniswapV3SwapCallback, IDydxCallee, ReentrancyGuard {
-    address private owner;
-    IWETH private WETH = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+enum LoanType {
+    Susd,
+    Seth
+}
+
+contract SnxLiquidator is IDydxCallee, ReentrancyGuard {
+    address public owner;
+    IWETH private weth = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ISoloMargin private soloMargin = ISoloMargin(0x1E0447b19BB6EcFdAe1e4AE1694b0C3659614e4e);
 
     address private susdLoan = 0xfED77055B40d63DCf17ab250FFD6948FBFF57B82;
@@ -86,50 +94,98 @@ contract SnxLiquidator is IUniswapV3SwapCallback, IDydxCallee, ReentrancyGuard {
     IERC20 private immutable susd = IERC20(0x57Ab1ec28D129707052df4dF418D58a2D46d5f51);
     IERC20 private immutable seth = IERC20(0x5e74C9036fb86BD7eCdcb084a0673EFc32eA31cb);
 
-    IUniswapV3PoolActions private immutable usdcWethPool =
-        IUniswapV3PoolActions(0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8);
+    address private immutable usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+
+    IQuoter private immutable quoter = IQuoter(0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6);
+    ISwapRouter private immutable uniRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
+
+    ICurveFiV2 private immutable curveSusdPool = ICurveFiV2(0xA5407eAE9Ba41422680e2e00537571bcC53efBfD);
+    ICurveFi private immutable curveSethPool = ICurveFi(0xc5424B857f758E906013F3555Dad202e4bdB4567);
 
     constructor() {
         owner = msg.sender;
-        WETH.approve(address(soloMargin), type(uint256).max);
+        weth.approve(address(soloMargin), type(uint256).max);
     }
 
     receive() external payable {}
 
     function liquidate(
-        address _account,
-        uint256 _loanID,
-        address _loanAddress
+        address account,
+        uint256 loanID,
+        LoanType loanType,
+        uint256 bribeBP
     ) external nonReentrant {
-        require(_loanAddress == susdLoan || _loanAddress == sethLoan, 'IA');
-        LoanType loanType = _loanAddress == susdLoan ? LoanType.Susd : LoanType.Seth;
+        IEtherCollatoral loanContract;
+        if (loanType == LoanType.Susd) {
+            loanContract = IEtherCollatoral(susdLoan);
+        } else {
+            loanContract = IEtherCollatoral(sethLoan);
+        }
 
-        IEtherCollatoral loanContract = IEtherCollatoral(_loanAddress);
         (, , uint256 loanAmount, , , uint256 timeClosed, uint256 accruedInterest, ) = loanContract.getLoan(
-            _account,
-            _loanID
+            account,
+            loanID
         );
 
         uint256 repayAmount = loanAmount + accruedInterest;
+        console.log('SUSD/SETH amount waiting to repay: ', repayAmount / 1e18);
 
-        require(timeClosed != 0, 'NC');
-        require(repayAmount > 0, 'ZR');
+        require(timeClosed == 0, 'Closed');
+        require(repayAmount > 0, 'Zero Repay');
 
         if (loanType == LoanType.Susd) {
             // Note: susd uses 18 decimals while usdc uses 6 decimals
             //       and we just roughly estimate the slippage on curve is 2%
             uint256 usdcAmount = ((repayAmount / 1e12) * 100) / 98;
-            usdcWethPool.swap(
-                address(this),
-                true,
-                -int256(usdcAmount),
-                TickMath.MIN_SQRT_RATIO + 1,
-                abi.encode(address(usdcWethPool))
-            );
-        } else {}
+            console.log('USDC amount: ', usdcAmount / 1e6);
+
+            // roughly use 200 to avoid more calc since flash loan fee is low in dydx
+            uint256 wethLoanAmount = 200 ether;
+            console.log('WETH loan amount: ', wethLoanAmount / 1e18);
+            dydxFlashLoan(account, loanID, wethLoanAmount, repayAmount, loanType, usdcAmount);
+
+            // send back remaining tokens
+            uint256 susdBalance = susd.balanceOf(address(this));
+            console.log('SUSD balance: ', susdBalance / 1e18);
+            susd.transfer(owner, susdBalance);
+        } else {
+            // slippage on curve is about 1.5%, use 2% here
+            uint256 wethLoanAmount = repayAmount * 100 / 98;
+            console.log('WETH loan amount: ', wethLoanAmount / 1e18);
+            dydxFlashLoan(account, loanID, wethLoanAmount, repayAmount, loanType, 0);
+        }
+
+        // send back all remaining WETH to owner
+        uint256 wethBalance = weth.balanceOf(address(this));
+        if (wethBalance > 0 ) {
+            weth.withdraw(wethBalance);
+        }
+        uint256 ethBalance = address(this).balance;
+        console.log('ETH balance after repay the debt: ', ethBalance / 1e18);
+
+        // calculate bribe for miner
+        uint256 bribeAmount = 0;
+        if (bribeBP > 0) {
+            bribeAmount = ethBalance * bribeBP / 10000;
+            bribe(bribeAmount);
+        }
+
+        payable(owner).transfer(ethBalance - bribeAmount);
     }
 
-    function dydxFlashLoan(uint256 _loanAmount, uint256 _repayAmount) internal {
+    function bribe(uint256 amount) internal {
+        console.log('Bribe amount: ', amount / 1e18);
+        block.coinbase.call{value: amount}('');
+    }
+
+    function dydxFlashLoan(
+        address snxAccount,
+        uint256 snxLoanID,
+        uint256 loanAmount,
+        uint256 repayAmount,
+        LoanType loanType,
+        uint256 usdcAmount
+    ) internal {
         Actions.ActionArgs[] memory operations = new Actions.ActionArgs[](3);
 
         operations[0] = Actions.ActionArgs({
@@ -139,7 +195,7 @@ contract SnxLiquidator is IUniswapV3SwapCallback, IDydxCallee, ReentrancyGuard {
                 sign: false,
                 denomination: Types.AssetDenomination.Wei,
                 ref: Types.AssetReference.Delta,
-                value: _loanAmount // Amount to borrow
+                value: loanAmount // Amount to borrow
             }),
             primaryMarketId: 0, // WETH
             secondaryMarketId: 0,
@@ -161,7 +217,7 @@ contract SnxLiquidator is IUniswapV3SwapCallback, IDydxCallee, ReentrancyGuard {
             secondaryMarketId: 0,
             otherAddress: address(this),
             otherAccountId: 0,
-            data: abi.encode(_loanAmount)
+            data: abi.encode(snxAccount, snxLoanID, loanAmount, repayAmount, loanType, usdcAmount)
         });
 
         operations[2] = Actions.ActionArgs({
@@ -171,7 +227,7 @@ contract SnxLiquidator is IUniswapV3SwapCallback, IDydxCallee, ReentrancyGuard {
                 sign: true,
                 denomination: Types.AssetDenomination.Wei,
                 ref: Types.AssetReference.Delta,
-                value: _loanAmount + 2 // Repayment amount with 2 wei fee
+                value: loanAmount + 2 // Repayment amount with 2 wei fee
             }),
             primaryMarketId: 0, // WETH
             secondaryMarketId: 0,
@@ -191,14 +247,62 @@ contract SnxLiquidator is IUniswapV3SwapCallback, IDydxCallee, ReentrancyGuard {
         address sender,
         Account.Info memory accountInfo,
         bytes memory data
-    ) external override {}
-
-    // Uniswap v3 swap callback function
-    function uniswapV3SwapCallback(
-        int256 amount0Delta,
-        int256 amount1Delta,
-        bytes calldata data
     ) external override {
-        require(msg.sender == address(usdcWethPool), "IS");
+        require(sender == address(this), 'Not from this contract');
+
+        (
+            address account,
+            uint256 loanID,
+            uint256 loanAmount,
+            uint256 repayAmount,
+            LoanType loanType,
+            uint256 usdcAmount
+        ) = abi.decode(data, (address, uint256, uint256, uint256, LoanType, uint256));
+
+        if (loanType == LoanType.Susd) {
+            weth.approve(address(uniRouter), loanAmount);
+            ISwapRouter.ExactOutputSingleParams memory params = ISwapRouter.ExactOutputSingleParams(
+                address(weth),
+                usdc,
+                3000,
+                address(this),
+                block.timestamp,
+                usdcAmount,
+                loanAmount,
+                0
+            );
+            uint256 wethSpent = uniRouter.exactOutputSingle(params);
+            console.log('WETH spent amount: ', wethSpent / 1e18);
+
+            // coin index in curve susd pool:
+            // 1 => usdc, 3 => susd
+            // swap usdc to susd
+            IERC20(usdc).approve(address(curveSusdPool), usdcAmount);
+            curveSusdPool.exchange(1, 3, usdcAmount, repayAmount);
+
+            susd.approve(susdLoan, repayAmount);
+            IEtherCollatoral(susdLoan).liquidateUnclosedLoan(account, loanID);
+
+            uint256 ethBalance = address(this).balance;
+            require((ethBalance + loanAmount - wethSpent) > loanAmount, 'LE');
+            console.log('ETH balance after liquidation: ', ethBalance / 1e18);
+
+        } else {
+            weth.withdraw(loanAmount);
+            // coin index in curve seth pool
+            // 0 => eth, 1 => seth
+            // swap eth for seth
+            uint256 sethAmount = curveSethPool.exchange{value: loanAmount}(0, 1, loanAmount, repayAmount);
+            console.log('Swapped SETH: ', sethAmount / 1e18);
+
+            seth.approve(sethLoan, repayAmount);
+            IEtherCollatoral(sethLoan).liquidateUnclosedLoan(account, loanID);
+
+            uint256 ethBalance = address(this).balance;
+            require(ethBalance > loanAmount, 'LETH');
+            console.log('ETH balance after liquidation: ', ethBalance / 1e18);
+
+            weth.deposit{value: loanAmount + 2}();
+        }
     }
 }
