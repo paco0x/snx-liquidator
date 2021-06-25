@@ -10,7 +10,6 @@
     "mem-pool-bot": "hardhat run ./bot/memPoolBot.ts"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^4.1.0",
     "@uniswap/v3-core": "^1.0.0",
     "@uniswap/v3-periphery": "^1.1.0"
   },

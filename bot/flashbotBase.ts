@@ -16,8 +16,8 @@ export const provider = new providers.WebSocketProvider(
 // create random one, only for signing txs
 export const authSigner = Wallet.createRandom().connect(provider);
 
-// deployed contract address
-export const contractAddr = '0x3e5d5926dcd62c2054af74e63bce067ad98857d4';
+// deployed liquidator contract address
+export const contractAddr = '0xb0C352225B161Da1Ba92b7d60Db3c26bF24c1Bb5';
 
 const loanABI = [
   'function loanLiquidationOpen() external view returns(bool)',

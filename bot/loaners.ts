@@ -5,7 +5,7 @@ export const susdLoaners = [
     loanAmount: '125296.15022400001',
     loanID: 283,
     loanType: 0,
-    minerBp: '900',
+    minerBp: '2000',
   },
   {
     account: '0x6235928f952Cd561B906D42b02Fe850bE2180012',
@@ -13,7 +13,7 @@ export const susdLoaners = [
     loanAmount: '101166.93680324999',
     loanID: 228,
     loanType: 0,
-    minerBp: '900',
+    minerBp: '2000',
   },
   {
     account: '0x569680033Cf81D379E24e0553230aB444Fe10559',
@@ -106,7 +106,7 @@ export const sethLoaners = [
     loanAmount: '8.0',
     loanID: 33,
     loanType: 1,
-    minerBp: '1500',
+    minerBp: '2000',
   },
   {
     account: '0x88C407C053bD2F434923ae13CED7213B4d2F8aE8',
@@ -114,7 +114,7 @@ export const sethLoaners = [
     loanAmount: '4.8',
     loanID: 56,
     loanType: 1,
-    minerBp: '1900',
+    minerBp: '2500',
   },
   {
     account: '0x5c46DeeA1783f1d7e9579B963f2021AC1B5BFE7b',

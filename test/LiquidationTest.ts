@@ -1,5 +1,5 @@
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
-import { Contract, Wallet } from 'ethers';
+import { BigNumber, Contract, Wallet } from 'ethers';
 import { ethers, network, waffle } from 'hardhat';
 import { expect } from 'chai';
 import chai from 'chai';
@@ -12,6 +12,7 @@ describe('SnxLiquidation', () => {
   let snxLiquidator: SnxLiquidator;
   let susdLoaner: Contract;
   let sethLoaner: Contract;
+  let chi: Contract;
   let signer: SignerWithAddress;
   const provider = waffle.provider;
 
@@ -21,13 +22,23 @@ describe('SnxLiquidation', () => {
   const susdLoanAddr = '0xfED77055B40d63DCf17ab250FFD6948FBFF57B82';
   const sethLoanAddr = '0x7133afF303539b0A4F60Ab9bd9656598BF49E272';
 
-  beforeEach(async () => {
+  const chiABI = [
+    'function balanceOf(address account) external view returns (uint256)',
+  ];
+  const chiAddr = '0x0000000000004946c0e9F43F4Dee607b0eF1fA1c';
+
+  before(async () => {
     [signer] = await ethers.getSigners();
+
+    chi = new ethers.Contract(chiAddr, chiABI, provider);
 
     const SnxLiquidatorFactory = await ethers.getContractFactory(
       'SnxLiquidator'
     );
     snxLiquidator = (await SnxLiquidatorFactory.deploy()) as SnxLiquidator;
+    const tx = await snxLiquidator.mintCHI('200');
+    const receipt = await tx.wait(1);
+    console.log('Minting CHI gas used: ', receipt.gasUsed.toString());
 
     // Set loanLiquidationOpen to true so we can mock liquidate
     await network.provider.send('hardhat_setStorageAt', [
@@ -47,15 +58,15 @@ describe('SnxLiquidation', () => {
 
   it('Set the loanLiquidationOpen to true', async () => {
     let liquidationOpened = await susdLoaner.loanLiquidationOpen();
-    expect(liquidationOpened).to.be.eq(true, 'SUSD liquidation not opened');
+    expect(liquidationOpened).eq(true, 'SUSD liquidation not opened');
 
     liquidationOpened = await sethLoaner.loanLiquidationOpen();
-    expect(liquidationOpened).to.be.eq(true, 'SETH liquidation not opened');
+    expect(liquidationOpened).eq(true, 'SETH liquidation not opened');
   });
 
   it('Owner is set correctly', async () => {
     const owner = await snxLiquidator.owner();
-    expect(owner).to.be.eq(signer.address);
+    expect(owner).eq(signer.address);
   });
 
   it('Liquidate on susd with bribe', async () => {
@@ -70,14 +81,12 @@ describe('SnxLiquidation', () => {
     const block = await provider.getBlock(blockNumber);
     const minerBalanceBefore = await provider.getBalance(block.miner);
 
-    console.log('Block number: ', blockNumber);
-
     const balanceBefore = await signer.getBalance();
     const tx = await snxLiquidator.liquidate(
-      '0x69Eb40B6E9ea1953d4F5d28667Cc7A1B773be68c',
-      239,
+      '0x45899a8104CDa54deaBaDDA505f0bBA68223F631',
+      283,
       0,
-      '9500',
+      '2000',
       { gasPrice: '0' }
     );
     const gasUsed = (await tx.wait(1)).gasUsed;
@@ -88,13 +97,63 @@ describe('SnxLiquidation', () => {
 
     console.log('Block number: ', await provider.getBlockNumber());
 
-    expect(balanceAfter).to.be.gt(balanceBefore);
+    expect(balanceAfter).gt(balanceBefore);
     console.log(
       'Profit: ',
       ethers.utils.formatEther(balanceAfter.sub(balanceBefore))
     );
 
-    expect(minerBalanceAfter).to.be.gt(
+    expect(minerBalanceAfter).gt(
+      minerBalanceBefore.add(ethers.utils.parseEther('2'))
+    );
+    const minerProfit = minerBalanceAfter
+      .sub(minerBalanceBefore)
+      .sub(ethers.utils.parseEther('2'));
+    console.log('Miner profit: ', ethers.utils.formatEther(minerProfit));
+    const avgGasPrice = minerProfit.div(gasUsed);
+    console.log(
+      'Avg gas price in gwei: ',
+      ethers.utils.formatUnits(avgGasPrice, 'gwei')
+    );
+
+    // withdraw susd
+    const withdrawTx = await snxLiquidator.withdraw(
+      '0x57Ab1ec28D129707052df4dF418D58a2D46d5f51'
+    );
+    const receipt = await withdrawTx.wait(1);
+    expect(receipt.status).eq(1);
+  });
+
+  it('Liquidate on seth with bribe', async () => {
+    const blockNumber = await provider.getBlockNumber();
+    const block = await provider.getBlock(blockNumber);
+    const minerBalanceBefore = await provider.getBalance(block.miner);
+
+    console.log('Block number: ', blockNumber);
+
+    const balanceBefore = await signer.getBalance();
+    const tx = await snxLiquidator.liquidate(
+      '0x820B24277A86fAc14ef5150c58B1815Cf9A3Cf46',
+      33,
+      1,
+      '1500',
+      { gasPrice: '0' }
+    );
+    const gasUsed = (await tx.wait(1)).gasUsed;
+    console.log(`Gas used: ${gasUsed}`);
+
+    const balanceAfter = await signer.getBalance();
+    const minerBalanceAfter = await provider.getBalance(block.miner);
+
+    console.log('Block number: ', await provider.getBlockNumber());
+
+    expect(balanceAfter).gt(balanceBefore);
+    console.log(
+      'Profit: ',
+      ethers.utils.formatEther(balanceAfter.sub(balanceBefore))
+    );
+
+    expect(minerBalanceAfter).gt(
       minerBalanceBefore.add(ethers.utils.parseEther('2'))
     );
     const minerProfit = minerBalanceAfter
@@ -108,46 +167,12 @@ describe('SnxLiquidation', () => {
     );
   });
 
-  it('Liquidate on seth with bribe', async () => {
-    const blockNumber = await provider.getBlockNumber();
-    const block = await provider.getBlock(blockNumber);
-    const minerBalanceBefore = await provider.getBalance(block.miner);
+  it('Can withdraw tokens', async () => {
+    await snxLiquidator.withdraw(chiAddr);
 
-    console.log('Block number: ', blockNumber);
+    const balance = await chi.balanceOf(signer.address);
+    console.log('Withdraw CHI: ', balance.toString());
 
-    const balanceBefore = await signer.getBalance();
-    const tx = await snxLiquidator.liquidate(
-      '0x6899f448072222c98E65ce3f29d9CcB92C739ad1',
-      98,
-      1,
-      '3000',
-      { gasPrice: '0' }
-    );
-    const gasUsed = (await tx.wait(1)).gasUsed;
-    console.log(`Gas used: ${gasUsed}`);
-
-    const balanceAfter = await signer.getBalance();
-    const minerBalanceAfter = await provider.getBalance(block.miner);
-
-    console.log('Block number: ', await provider.getBlockNumber());
-
-    expect(balanceAfter).to.be.gt(balanceBefore);
-    console.log(
-      'Profit: ',
-      ethers.utils.formatEther(balanceAfter.sub(balanceBefore))
-    );
-
-    expect(minerBalanceAfter).to.be.gt(
-      minerBalanceBefore.add(ethers.utils.parseEther('2'))
-    );
-    const minerProfit = minerBalanceAfter
-      .sub(minerBalanceBefore)
-      .sub(ethers.utils.parseEther('2'));
-    console.log('Miner profit: ', ethers.utils.formatEther(minerProfit));
-    const avgGasPrice = minerProfit.div(gasUsed);
-    console.log(
-      'Avg gas price in gwei: ',
-      ethers.utils.formatUnits(avgGasPrice, 'gwei')
-    );
+    expect(balance).gt('0');
   });
 });

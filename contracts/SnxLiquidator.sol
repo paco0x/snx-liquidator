@@ -1,7 +1,6 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
-import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
 import '@uniswap/v3-periphery/contracts/interfaces/IQuoter.sol';
 import '@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol';
 
@@ -43,7 +42,7 @@ interface ICurveFi {
         int128 j,
         uint256 dx,
         uint256 min_dy
-    ) external payable returns(uint256);
+    ) external payable returns (uint256);
 }
 
 interface ICurveFiV2 {
@@ -78,12 +77,17 @@ interface IEtherCollatoral {
         );
 }
 
+interface ChiToken {
+    function freeUpTo(uint256 value) external returns (uint256);
+    function mint(uint256 value) external;
+}
+
 enum LoanType {
     Susd,
     Seth
 }
 
-contract SnxLiquidator is IDydxCallee, ReentrancyGuard {
+contract SnxLiquidator is IDydxCallee {
     address public owner;
     IWETH private weth = IWETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     ISoloMargin private soloMargin = ISoloMargin(0x1E0447b19BB6EcFdAe1e4AE1694b0C3659614e4e);
@@ -102,6 +106,18 @@ contract SnxLiquidator is IDydxCallee, ReentrancyGuard {
     ICurveFiV2 private immutable curveSusdPool = ICurveFiV2(0xA5407eAE9Ba41422680e2e00537571bcC53efBfD);
     ICurveFi private immutable curveSethPool = ICurveFi(0xc5424B857f758E906013F3555Dad202e4bdB4567);
 
+    ChiToken private constant chi = ChiToken(0x0000000000004946c0e9F43F4Dee607b0eF1fA1c);
+
+    modifier discountCHI {
+        uint256 gasStart = gasleft();
+
+        _;
+
+        uint256 gasSpent = 21000 + gasStart - gasleft() + 16 * msg.data.length;
+        console.log('Gas spent: ', gasSpent);
+        chi.freeUpTo((gasSpent + 14154) / 41947);
+    }
+
     constructor() {
         owner = msg.sender;
         weth.approve(address(soloMargin), type(uint256).max);
@@ -109,12 +125,25 @@ contract SnxLiquidator is IDydxCallee, ReentrancyGuard {
 
     receive() external payable {}
 
+    function mintCHI(uint256 value) external {
+        chi.mint(value);
+    }
+
+    function withdraw(address token) external {
+        require(owner == msg.sender, 'NO');
+        if (token == address(0)) {
+            payable(msg.sender).transfer(address(this).balance);
+        } else {
+            IERC20(token).transfer(msg.sender, IERC20(token).balanceOf(address(this)));
+        }
+    }
+
     function liquidate(
         address account,
         uint256 loanID,
         LoanType loanType,
         uint256 bribeBP
-    ) external nonReentrant {
+    ) external discountCHI {
         IEtherCollatoral loanContract;
         if (loanType == LoanType.Susd) {
             loanContract = IEtherCollatoral(susdLoan);
@@ -137,36 +166,23 @@ contract SnxLiquidator is IDydxCallee, ReentrancyGuard {
             // Note: susd uses 18 decimals while usdc uses 6 decimals
             //       and we just roughly estimate the slippage on curve is 2%
             uint256 usdcAmount = ((repayAmount / 1e12) * 100) / 98;
-            console.log('USDC amount: ', usdcAmount / 1e6);
-
             // roughly use 200 to avoid more calc since flash loan fee is low in dydx
             uint256 wethLoanAmount = 200 ether;
-            console.log('WETH loan amount: ', wethLoanAmount / 1e18);
             dydxFlashLoan(account, loanID, wethLoanAmount, repayAmount, loanType, usdcAmount);
-
-            // send back remaining tokens
-            uint256 susdBalance = susd.balanceOf(address(this));
-            console.log('SUSD balance: ', susdBalance / 1e18);
-            susd.transfer(owner, susdBalance);
         } else {
             // slippage on curve is about 1.5%, use 2% here
-            uint256 wethLoanAmount = repayAmount * 100 / 98;
-            console.log('WETH loan amount: ', wethLoanAmount / 1e18);
+            uint256 wethLoanAmount = (repayAmount * 100) / 98;
+            // console.log('WETH loan amount: ', wethLoanAmount / 1e18);
             dydxFlashLoan(account, loanID, wethLoanAmount, repayAmount, loanType, 0);
         }
 
-        // send back all remaining WETH to owner
-        uint256 wethBalance = weth.balanceOf(address(this));
-        if (wethBalance > 0 ) {
-            weth.withdraw(wethBalance);
-        }
         uint256 ethBalance = address(this).balance;
-        console.log('ETH balance after repay the debt: ', ethBalance / 1e18);
+        // console.log('ETH balance after repay the debt: ', ethBalance / 1e18);
 
         // calculate bribe for miner
         uint256 bribeAmount = 0;
         if (bribeBP > 0) {
-            bribeAmount = ethBalance * bribeBP / 10000;
+            bribeAmount = (ethBalance * bribeBP) / 10000;
             bribe(bribeAmount);
         }
 
@@ -174,7 +190,7 @@ contract SnxLiquidator is IDydxCallee, ReentrancyGuard {
     }
 
     function bribe(uint256 amount) internal {
-        console.log('Bribe amount: ', amount / 1e18);
+        // console.log('Bribe amount: ', amount);
         block.coinbase.call{value: amount}('');
     }
 
@@ -245,7 +261,7 @@ contract SnxLiquidator is IDydxCallee, ReentrancyGuard {
     // Dydx flash loan callback function
     function callFunction(
         address sender,
-        Account.Info memory accountInfo,
+        Account.Info memory,
         bytes memory data
     ) external override {
         require(sender == address(this), 'Not from this contract');
@@ -272,10 +288,8 @@ contract SnxLiquidator is IDydxCallee, ReentrancyGuard {
                 0
             );
             uint256 wethSpent = uniRouter.exactOutputSingle(params);
-            console.log('WETH spent amount: ', wethSpent / 1e18);
 
-            // coin index in curve susd pool:
-            // 1 => usdc, 3 => susd
+            // coin index in curve susd pool: 1 => usdc, 3 => susd
             // swap usdc to susd
             IERC20(usdc).approve(address(curveSusdPool), usdcAmount);
             curveSusdPool.exchange(1, 3, usdcAmount, repayAmount);
@@ -283,25 +297,15 @@ contract SnxLiquidator is IDydxCallee, ReentrancyGuard {
             susd.approve(susdLoan, repayAmount);
             IEtherCollatoral(susdLoan).liquidateUnclosedLoan(account, loanID);
 
-            uint256 ethBalance = address(this).balance;
-            require((ethBalance + loanAmount - wethSpent) > loanAmount, 'LE');
-            console.log('ETH balance after liquidation: ', ethBalance / 1e18);
-
-            weth.deposit{value: ethBalance}();
+            weth.deposit{value: wethSpent + 2}();
         } else {
             weth.withdraw(loanAmount);
-            // coin index in curve seth pool
-            // 0 => eth, 1 => seth
+            // coin index in curve seth pool: 0 => eth, 1 => seth
             // swap eth for seth
-            uint256 sethAmount = curveSethPool.exchange{value: loanAmount}(0, 1, loanAmount, repayAmount);
-            console.log('Swapped SETH: ', sethAmount / 1e18);
+            curveSethPool.exchange{value: loanAmount}(0, 1, loanAmount, repayAmount);
 
             seth.approve(sethLoan, repayAmount);
             IEtherCollatoral(sethLoan).liquidateUnclosedLoan(account, loanID);
-
-            uint256 ethBalance = address(this).balance;
-            require(ethBalance > loanAmount, 'LETH');
-            console.log('ETH balance after liquidation: ', ethBalance / 1e18);
 
             weth.deposit{value: loanAmount + 2}();
         }
