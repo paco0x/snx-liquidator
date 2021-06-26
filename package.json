@@ -5,10 +5,10 @@
   "author": "Penghui Liao <liaoishere@gmail.com>",
   "license": "MIT",
   "scripts": {
-    "seth-searcher": "ts-node ./bot/susdLiquidation.ts",
-    "susd-searcher": "ts-node ./bot/sethLiquidation.ts",
-    "mempool-searcher": "ts-node ./bot/memPoolBot.ts",
-    "flashbots-user-stat": "ts-node ./bot/flashbotsUserStat.ts"
+    "seth-searcher": "ts-node ./searcher/susdSearcher.ts",
+    "susd-searcher": "ts-node ./searcher/sethSearcher.ts",
+    "mempool-searcher": "ts-node ./searcher/mempoolSearcher.ts",
+    "flashbots-user-stat": "ts-node ./searcher/flashbotsUserStat.ts"
   },
   "dependencies": {
     "@uniswap/v3-core": "^1.0.0",
