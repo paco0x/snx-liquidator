@@ -6,16 +6,17 @@ import {
   FlashbotsTransactionResponse,
 } from '@flashbots/ethers-provider-bundle';
 import { encode } from 'rlp';
-import web3 from 'web3';
+import { BigNumber } from 'ethers';
+import { hexStripZeros } from 'ethers/lib/utils';
 
 import { sethLoaners, susdLoaners } from './loaners';
 import {
   provider,
-  authSigner,
+  createFlashbotsProvider,
   getBundles,
   susdCollateralAddr,
   sethCollateralAddr,
-} from './flashbotBase';
+} from './flashbotsBase';
 
 const snxDAO = '0xEb3107117FEAd7de89Cd14D463D340A2E6917769';
 
@@ -28,18 +29,21 @@ const options = {
     console.log(error);
   },
 };
-
 // initialize and connect to the api
 const blocknative = new BlocknativeSdk(options);
 blocknative.configuration({ scope: snxDAO, watchAddress: true });
 
+function toHex(n: any): string {
+  return hexStripZeros(BigNumber.from(n)._hex);
+}
+
 function constructSignedTx(tx: EthereumTransactionData): string {
   const params = [
-    web3.utils.numberToHex(tx.nonce),
-    web3.utils.numberToHex(parseInt(tx.gasPrice)),
-    web3.utils.numberToHex(tx.gas),
+    toHex(tx.nonce),
+    toHex(tx.gasPrice),
+    toHex(tx.gas),
     tx.to,
-    tx.value === '0' ? '0x' : web3.utils.numberToHex(parseInt(tx.value)),
+    toHex(tx.value),
     tx.input,
     tx.v,
     tx.r,
@@ -86,10 +90,7 @@ function trySubmitBundlesWithSnxTx(
 }
 
 async function main() {
-  const flashbotsProvider = await FlashbotsBundleProvider.create(
-    provider,
-    authSigner
-  );
+  const flashbotsProvider = await createFlashbotsProvider();
 
   const [susdSignedTxs, susdRevertingTxHashes] = await getBundles(
     susdLoaners,

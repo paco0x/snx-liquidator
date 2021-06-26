@@ -1,5 +1,5 @@
 import { BigNumber, Contract } from 'ethers';
-import { susdCollateral, sethCollateral } from './flashbotBase';
+import { susdCollateral, sethCollateral } from './flashbotsBase';
 import { susdLoaners, sethLoaners } from './loaners';
 
 async function main() {

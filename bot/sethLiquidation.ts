@@ -1,18 +1,13 @@
-import { FlashbotsBundleProvider } from '@flashbots/ethers-provider-bundle';
-
 import { sethLoaners } from './loaners';
 import {
   provider,
-  authSigner,
+  createFlashbotsProvider,
   getBundles,
   sethCollateral,
-} from './flashbotBase';
+} from './flashbotsBase';
 
 async function main() {
-  const flashbotsProvider = await FlashbotsBundleProvider.create(
-    provider,
-    authSigner
-  );
+  const flashbotsProvider = await createFlashbotsProvider();
 
   const [signedTxs, revertingTxHashes] = await getBundles(
     sethLoaners,
@@ -31,7 +26,6 @@ async function main() {
     }
 
     if (opened) {
-      // const blockNumber = await provider.getBlockNumber();
       // const simulation = await flashbotsProvider.simulate(
       //   signedTxs,
       //   blockNumber + 1
@@ -52,9 +46,10 @@ async function main() {
       if ('error' in bundleSubmission) {
         throw new Error(bundleSubmission.error.message);
       }
-      const waitResponse = await bundleSubmission.wait();
 
+      const waitResponse = await bundleSubmission.wait();
       console.log(`Response: ${waitResponse}`);
+
       if (waitResponse === 0) {
         console.log('Bundle handled successfully');
         process.exit(0);

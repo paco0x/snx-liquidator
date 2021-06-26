@@ -7,14 +7,12 @@ import {
 } from '@flashbots/ethers-provider-bundle';
 
 import { SnxLiquidator } from '../typechain/SnxLiquidator';
+import operator from '../.secret';
 
 // Standard json rpc provider directly from ethers.js (NOT Flashbots)
 export const provider = new providers.WebSocketProvider(
   'wss://mainnet.infura.io/ws/v3/3a57292f72e4472b8ac896816a27d51f'
 );
-
-// create random one, only for signing txs
-export const authSigner = Wallet.createRandom().connect(provider);
 
 // deployed liquidator contract address
 export const contractAddr = '0xb0C352225B161Da1Ba92b7d60Db3c26bF24c1Bb5';
@@ -38,6 +36,16 @@ export const sethCollateral = new ethers.Contract(
   provider
 );
 
+// flashtbots relay signer
+const flashbotsSigner = new Wallet(operator.flashBotPrivate);
+
+export async function createFlashbotsProvider(): Promise<FlashbotsBundleProvider> {
+  return await FlashbotsBundleProvider.create(provider, flashbotsSigner);
+}
+
+// arbitrage signer
+const signer = Wallet.createRandom().connect(provider);
+
 export async function getBundles(
   loaners: Array<any>,
   flashbotsProvider: FlashbotsBundleProvider
@@ -48,7 +56,7 @@ export async function getBundles(
   let bundles = new Array<FlashbotsBundleTransaction>();
   for (const loaner of loaners) {
     const tx = await liquidator
-      .connect(authSigner)
+      .connect(signer)
       .populateTransaction.liquidate(
         loaner.account,
         loaner.loanID,
@@ -59,7 +67,7 @@ export async function getBundles(
           gasLimit: 1500000,
         }
       );
-    bundles.push({ signer: authSigner, transaction: tx });
+    bundles.push({ signer: signer, transaction: tx });
   }
   const signedTxs = await flashbotsProvider.signBundle(bundles);
   const revertingTxHashes = signedTxs.map((v) => keccak256(v));

@@ -5,9 +5,10 @@
   "author": "Penghui Liao <liaoishere@gmail.com>",
   "license": "MIT",
   "scripts": {
-    "seth-flashbot": "hardhat run ./bot/susdLiquidation.ts",
-    "susd-flashbot": "hardhat run ./bot/sethLiquidation.ts",
-    "mem-pool-bot": "hardhat run ./bot/memPoolBot.ts"
+    "seth-searcher": "ts-node ./bot/susdLiquidation.ts",
+    "susd-searcher": "ts-node ./bot/sethLiquidation.ts",
+    "mempool-searcher": "ts-node ./bot/memPoolBot.ts",
+    "flashbots-user-stat": "ts-node ./bot/flashbotsUserStat.ts"
   },
   "dependencies": {
     "@uniswap/v3-core": "^1.0.0",
@@ -33,7 +34,6 @@
     "ts-node": "^10.0.0",
     "typechain": "^5.1.0",
     "typescript": "^4.3.4",
-    "web3": "^1.3.6",
     "ws": "^7.5.0"
   }
 }
