@@ -1,10 +1,7 @@
 import BlocknativeSdk from 'bnc-sdk';
 import { EthereumTransactionData } from 'bnc-sdk/dist/types/src/interfaces';
 import WebSocket from 'ws';
-import {
-  FlashbotsBundleProvider,
-  FlashbotsTransactionResponse,
-} from '@flashbots/ethers-provider-bundle';
+import { FlashbotsBundleProvider } from '@flashbots/ethers-provider-bundle';
 import { encode } from 'rlp';
 import { BigNumber } from 'ethers';
 import { hexStripZeros } from 'ethers/lib/utils';
@@ -19,19 +16,6 @@ import {
 } from './flashbotsBase';
 
 const snxDAO = '0xEb3107117FEAd7de89Cd14D463D340A2E6917769';
-
-const options = {
-  dappId: '85c6c02a-2df3-4758-980a-7143da2ae777',
-  networkId: 1,
-  ws: WebSocket,
-  name: 'Snx DAO monitor',
-  onerror: (error: any) => {
-    console.log(error);
-  },
-};
-// initialize and connect to the api
-const blocknative = new BlocknativeSdk(options);
-blocknative.configuration({ scope: snxDAO, watchAddress: true });
 
 function toHex(n: any): string {
   return hexStripZeros(BigNumber.from(n)._hex);
@@ -52,7 +36,7 @@ function constructSignedTx(tx: EthereumTransactionData): string {
   return '0x' + encode(params).toString('hex');
 }
 
-function trySubmitBundlesWithSnxTx(
+async function trySubmitBundlesWithSnxTx(
   flashbotsProvider: FlashbotsBundleProvider,
   bundle: Array<string>,
   revertingTxHashes: Array<string>,
@@ -66,32 +50,44 @@ function trySubmitBundlesWithSnxTx(
   for (let i = blockNumber + 1; i <= blockNumber + 3; i++) {
     console.log(`Try submit bundle on block ${i}`);
 
-    flashbotsProvider
-      .sendRawBundle(bundle, i, { revertingTxHashes })
-      .then((bundleSubmission) => {
-        console.log(`bundle submitted, waiting`);
-        if ('error' in bundleSubmission) {
-          throw new Error(bundleSubmission.error.message);
-        }
-        return (bundleSubmission as FlashbotsTransactionResponse).wait();
-      })
-      .then((waitResponse) => {
-        console.log(`Response: ${waitResponse}`);
-        if (waitResponse === 0) {
-          console.log('Bundle handled successfully');
-          process.exit(0);
-        } else {
-        }
-      })
-      .catch((e) => {
-        console.error('Bundle error: ', e);
-      });
+    const bundleSubmission = await flashbotsProvider.sendRawBundle(bundle, i, {
+      revertingTxHashes,
+    });
+    console.log('bundle submitted, waiting');
+    if ('error' in bundleSubmission) {
+      console.error(
+        'Bundle submission error: ',
+        bundleSubmission.error.message
+      );
+      continue;
+    }
+
+    const waitResponse = await bundleSubmission.wait();
+    console.log('Response code: ', waitResponse);
+    if (waitResponse === 0) {
+      console.log('Bundle hanlded successfully');
+      break;
+    }
   }
 }
 
 async function main() {
+  const options = {
+    dappId: '85c6c02a-2df3-4758-980a-7143da2ae777',
+    networkId: 1,
+    ws: WebSocket,
+    name: 'Snx DAO monitor',
+    onerror: (error: any) => {
+      console.log(error);
+    },
+  };
+  const blocknative = new BlocknativeSdk(options);
+  blocknative.configuration({ scope: snxDAO, watchAddress: true });
+  const { emitter } = blocknative.account(snxDAO);
+
   const flashbotsProvider = await createFlashbotsProvider();
 
+  // prepare liquidation tx bundles
   const [susdSignedTxs, susdRevertingTxHashes] = await getBundles(
     susdLoaners,
     flashbotsProvider
@@ -101,36 +97,40 @@ async function main() {
     flashbotsProvider
   );
 
+  // refresh block number
   let blockNumber = await provider.getBlockNumber();
   provider.on('block', async (_blockNumber) => {
     console.log(`Block number: ${_blockNumber}`);
     blockNumber = _blockNumber;
   });
 
-  const { emitter } = blocknative.account(snxDAO);
-
+  // blindly submit for SUSD and SETH incase the tx simulation lantency too high
   emitter.on('txPool', (tx) => {
     tx = tx as EthereumTransactionData;
     console.log('Tx hash:', tx.hash);
     const signedSnxTx = constructSignedTx(tx);
 
-    trySubmitBundlesWithSnxTx(
-      flashbotsProvider,
-      susdSignedTxs,
-      susdRevertingTxHashes,
-      signedSnxTx,
-      blockNumber
-    );
-
-    trySubmitBundlesWithSnxTx(
-      flashbotsProvider,
-      sethSignedTxs,
-      sethRevertingTxHashes,
-      signedSnxTx,
-      blockNumber
-    );
+    (async function () {
+      await Promise.all([
+        trySubmitBundlesWithSnxTx(
+          flashbotsProvider,
+          susdSignedTxs,
+          susdRevertingTxHashes,
+          signedSnxTx,
+          blockNumber
+        ),
+        trySubmitBundlesWithSnxTx(
+          flashbotsProvider,
+          sethSignedTxs,
+          sethRevertingTxHashes,
+          signedSnxTx,
+          blockNumber
+        ),
+      ]);
+    })().catch((e) => console.error(e));
   });
 
+  // submit for SUSD or SETH by comparing internal callee address
   emitter.on('txPoolSimulation', (tx) => {
     tx = tx as EthereumTransactionData;
     console.log('Tx hash:', tx.hash);
@@ -151,13 +151,15 @@ async function main() {
           continue;
       }
 
-      trySubmitBundlesWithSnxTx(
-        flashbotsProvider,
-        bundle,
-        revertingHashes,
-        signedSnxTx,
-        blockNumber
-      );
+      (async function () {
+        await trySubmitBundlesWithSnxTx(
+          flashbotsProvider,
+          bundle,
+          revertingHashes,
+          signedSnxTx,
+          blockNumber
+        );
+      })().catch((e) => console.error(e));
     }
   });
 }
